@@ -1,4 +1,4 @@
-package com.example.arclevelviewdemo;
+﻿package com.example.arclevelviewdemo;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
@@ -11,8 +11,14 @@ import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
 
+/**
+ * onDraw方法需要优化，尽可能的减少对象的创建
+ * @author Administrator
+ *
+ */
 public class ArcLevelView extends View {
 	public static final String TAG = ArcLevelView.class.getSimpleName();
 
@@ -53,7 +59,9 @@ public class ArcLevelView extends View {
 	private float mMaxProgress = 300000;
 	private float mCurrentProgress;
 	private float mProgressPercent;
+	private float mAnimationProgressPercent; // 动态变化的
 	private float mArrowAngle;
+	private float mAnimationAngle; // 动态变化的
 
 	private float mStartAngle = 160;
 	private float mSweepAngle = 220;
@@ -65,7 +73,7 @@ public class ArcLevelView extends View {
 	private float mCenterX, mCenterY;
 
 	private String mInterestRateText = mInternalBigLevelTexts[0];
-
+	
 	public ArcLevelView(Context context) {
 		this(context, null);
 	}
@@ -185,7 +193,7 @@ public class ArcLevelView extends View {
 		mArrowPaint.setStyle(Style.FILL);
 		mArrowPaint.setColor(Color.WHITE);
 
-		mArrowAngle = mStartAngle;
+		mAnimationAngle = mStartAngle;
 
 		initAngleBlocks();
 
@@ -384,7 +392,7 @@ public class ArcLevelView extends View {
 	 * @param canvas
 	 */
 	private void drawProgress(Canvas canvas) {
-		float progressAngle = mProgressPercent * mSweepAngle;
+		float progressAngle = mAnimationProgressPercent * mSweepAngle;
 		mProgressArcPaint.setStrokeWidth(mExternalRingWidth);
 		canvas.drawArc(mExternalRingRect, mStartAngle, progressAngle, false, mProgressArcPaint);
 	}
@@ -395,11 +403,11 @@ public class ArcLevelView extends View {
 	 */
 	private void drawPointerArrow(Canvas canvas) {
 		mArrowPath.reset();
-		Point p1 = getCoordinatePoint(mArrowCircleRadius / 2, mArrowAngle + 90);
+		Point p1 = getCoordinatePoint(mArrowCircleRadius / 2, mAnimationAngle + 90);
 		mArrowPath.moveTo(p1.x, p1.y);
-		Point p2 = getCoordinatePoint(mArrowCircleRadius / 2, mArrowAngle - 90);
+		Point p2 = getCoordinatePoint(mArrowCircleRadius / 2, mAnimationAngle - 90);
 		mArrowPath.lineTo(p2.x, p2.y);
-		Point p3 = getCoordinatePoint(mArrowLength, mArrowAngle);
+		Point p3 = getCoordinatePoint(mArrowLength, mAnimationAngle);
 		mArrowPath.lineTo(p3.x, p3.y);
 		mArrowPath.close();
 		canvas.drawPath(mArrowPath, mArrowPaint);
@@ -423,11 +431,16 @@ public class ArcLevelView extends View {
 		if (mCurrentProgress != currentProgress && currentProgress >= 0) {
 			mCurrentProgress = currentProgress > mMaxProgress ? mMaxProgress : currentProgress;
 			mCurrentBlock = getCurrentBlock();
+			setProgressPercent(calculateProgressPercent());
 		}
 	}
 
 	public float getCurrentProgress() {
 		return mCurrentProgress;
+	}
+	
+	private void setProgressPercent(float percent) {
+		mProgressPercent = percent;
 	}
 
 	private float calculateBlockProgressPercent() {
@@ -437,14 +450,16 @@ public class ArcLevelView extends View {
 	}
 
 	private float calculateProgressPercent() {
-		float percentAngle = calculateBlockProgressPercent() * (mCurrentBlock.endAngle - mCurrentBlock.startAngle);
-		float percent = (mCurrentBlock.startAngle - mStartAngle + percentAngle) / mSweepAngle;
+		float blockAngle = calculateBlockProgressPercent() * (mCurrentBlock.endAngle - mCurrentBlock.startAngle);
+		float percent = (mCurrentBlock.startAngle - mStartAngle + blockAngle) / mSweepAngle;
 		return percent;
 	}
 
-	private void setProgressPercent(float percent) {
-		mProgressPercent = percent;
-		mArrowAngle = mStartAngle + mProgressPercent * mSweepAngle;
+	private void setAnimationProgressPercent(float percent) {
+		mAnimationProgressPercent = percent;
+		final float averageAngle = (mArrowAngle - mStartAngle) / mProgressPercent;
+		mAnimationAngle = mStartAngle + mAnimationProgressPercent * averageAngle;
+//		mArrowAngle = mStartAngle + mProgressPercent * mSweepAngle;
 //		for (int i = 0; i < mBlocks.length; i++) {
 //			Block block = mBlocks[i];
 //			if (block.startAngle <= mArrowAngle && mArrowAngle < block.endAngle) {
@@ -461,8 +476,9 @@ public class ArcLevelView extends View {
 			if (level % 4 == 0) {
 				if (text.contains(mInternalBigLevelTexts[textIndex])) {
 					mArrowAngle = mStartAngle + averageAngle * level;
+					Log.w(TAG, "mArrowAngle: " + mArrowAngle);
 					mInterestRateText = text;
-					break;
+					return;
 				} else {
 					textIndex++;
 				}
@@ -484,12 +500,13 @@ public class ArcLevelView extends View {
 					@Override
 					public void onAnimationUpdate(ValueAnimator animation) {
 						float value = (Float) animation.getAnimatedValue();
-						setProgressPercent(value);
+						setAnimationProgressPercent(value);
 					}
 				});
 				anim.start();
 			}
 		}, 200);
+
 	}
 
 	/**
